@@ -1,6 +1,6 @@
 
 %% Test Gaussian
-clear all; 
+%clear all; 
 close all
 
 % select=@(target,r)target(1:end/r);
@@ -12,7 +12,7 @@ close all
 % remap01=@(x)remap(x,0,1);
 
 N = 256;
-target = randn(N,1);
+target = ones(N,1);
 target = target/norm(target);
 % target = loadresample('orig_ex_1.wav',2);
 % target = target(1:N);
@@ -30,7 +30,7 @@ options.Q1=1;
 options.niters=1000;
 options.dataset='unidim';
 options.lambda=+1e-6;
-options.multigrid=1;
+options.multigrid=0;
 options.recenter = 0;
 options.lr0=0.1;%8e-1;
 options.init_with_first=0;
@@ -46,7 +46,7 @@ fouriereq=getoptions(options,'fouriereq',0);%replace scattering with spectral eq
 N  = getoptions(options,'N',1024);
 J1 = getoptions(options,'J1',8);
 dataset=getoptions(options,'dataset','unidim');
-Q1 = getoptions(options,'Q1',1);
+Q1 = getoptions(options,'Q1',8);
 J2 = getoptions(options,'J2',8);
 Q2 = getoptions(options,'Q2',1);
 J3 = getoptions(options,'J3',8);
@@ -80,7 +80,6 @@ options.splines=0;
 
 
 options.l2scatt=1;
-options.multigrid=1;
 options.positive = 0;
 options
 
@@ -122,15 +121,26 @@ opt_2d
 
 Si=Scataudio_to_Scatimage(Sa,filters,opt_2d.J1);
 
-reco= newscatt_synthesis_mgrid(Si, filt_2d, opt_2d, target, max(target(:)));
+
+
+%%debugging 
+xx = ones(N,N);
+xx = xx/norm(xx(:));
+[Sx,~]= fwdscatt(xx,filt_2d, opt_2d);%for debug
+x = scat2vector(Sx);
+
+opt_2d.init = xx;
+
+[reco,energy]= newscatt_synthesis_mgrid(Si, filt_2d, opt_2d, target, max(target(:)));
 [Sr,~]= fwdscatt(reco,filt_2d, opt_2d);%for debug
 
+figure;
 r = scat2vector(Sr);
 s = scat2vector(Si);
-plot(r/norm(r(:)));hold on; plot(s/norm(s(:)),'r')
+plot(r);hold on; plot(s,'r')
 
 
-subplot(1,2,1);hist(reco(:),512);
+figure;subplot(1,2,1);hist(reco(:),512);
 subplot(1,2,2);hist(target(:),512);
 
 % reco= 2*(reco-1);

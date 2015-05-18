@@ -7,13 +7,15 @@ for m=1:size(Sa,2) %m==2 means we only have 1 level {0},{1}
         Si{m}{r}.l1 = cat(2,Sa{m}{r}.l1,Sa{m}{r}.l1);
         Si{m}{r}.l2 = cat(2,Sa{m}{r}.l2,Sa{m}{r}.l2);
 
+        
         [j,q] = ind2sub([J Q], Sa{m}{r}.scale(m));
+        
         if m==2 
             Si{m}{r}.scale = [0 j];
             Si{m}{r}.orientation = [0 q];	
         else
             Si{m}{r}.scale = j;
-            Si{m}{r}.orientation = q;	
+            Si{m}{r}.orientation = 0;	
         end    
     end 
 end 
