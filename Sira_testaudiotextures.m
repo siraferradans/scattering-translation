@@ -12,8 +12,6 @@ close all
 % remap01=@(x)remap(x,0,1);
 
 N = 256;
-target = rand(N,1);
-target = target/norm(target);
 % target = loadresample('orig_ex_1.wav',2);
 % target = target(1:N);
 %for audio!!
@@ -26,7 +24,7 @@ options.J3=min(log2(options.N),12);
 options.L1=1;
 options.L2=1;
 options.L3=1;
-options.Q1=1;
+options.Q1=8;
 options.niters=1000;
 options.dataset='unidim';
 options.lambda=+1e-6;
@@ -46,7 +44,7 @@ fouriereq=getoptions(options,'fouriereq',0);%replace scattering with spectral eq
 N  = getoptions(options,'N',1024);
 J1 = getoptions(options,'J1',8);
 dataset=getoptions(options,'dataset','unidim');
-Q1 = getoptions(options,'Q1',8);
+Q1 = getoptions(options,'Q1',1);
 J2 = getoptions(options,'J2',8);
 Q2 = getoptions(options,'Q2',1);
 J3 = getoptions(options,'J3',8);
@@ -83,14 +81,36 @@ options.l2scatt=1;
 options.positive = 0;
 options
 
+%% Filter generation
+% audio part
 [filters,lpal] = generate_scatt_filters(options);
-
-options
-
-Sa= fwdscatt(target,filters, options);
 J = log2(N);
 %number of coefficients:
 1+options.Q1*options.J1
+%1+options.Q1*options.J1+(options.Q1*options.Q2*options.J1*(options.J2-1))/2
+
+% image part
+opt_2d = options;
+opt_2d.L1=8;
+opt_2d.L2=1;
+opt_2d.Q1=1;
+opt_2d.Q2=1;
+
+opt_2d.onedim=false;
+opt_2d.softthreshold=0;
+opt_2d
+[filt_2d,lpal_2d] = generate_scatt_filters(opt_2d);
+
+1+opt_2d.L1*opt_2d.J1%+(opt_2d.L1*opt_2d.J1*opt_2d.L2*(opt_2d.J2-1))/2
+
+%%%%%%%%%%%%%%%% Application to signals %%%%%%%%%%%%%%%%%%%
+
+%% Gaussian
+target = randn(N,1);
+target = target-min(target(:));
+target = target/norm(target);
+
+Sa= fwdscatt(target,filters, options);
 
 %%%%%% testing...
 %Ojo Q=1!! sino no funciona!  y los valores no pueden ser negativos 
@@ -101,42 +121,40 @@ J = log2(N);
 % plot(a);hold on; plot(r,'r')
 %%%%%
 
-%% %%%%%%%%%%%%%%%%% image part
-opt_2d = options;
-opt_2d.L1=1;
-opt_2d.L2=1;
-opt_2d.Q1=1;
-opt_2d.Q2=1;
-
-opt_2d.onedim=false;
-
-opt_2d
-[filt_2d,lpal_2d] = generate_scatt_filters(opt_2d);
-
-1+opt_2d.L1*opt_2d.J1
-
 % translate Sa into a Simages
 % just taking into account the first and second layer, but we need to
 % change the meta data
 
 Si=Scataudio_to_Scatimage(Sa,filters,opt_2d.J1);
-
-
 [reco,energy]= newscatt_synthesis_mgrid(Si, filt_2d, opt_2d, target, max(target(:)));
-[Sr,~]= fwdscatt(reco,filt_2d, opt_2d);%for debug
 
+%see difference
+[Sr,~]= fwdscatt(reco,filt_2d, opt_2d);%for debug
 figure;
 r = scat2vector(Sr);
 s = scat2vector(Si);
 plot(r);hold on; plot(s,'r')
+figure;subplot(1,2,1);hist(reco(:),512);title(['M=' num2str(mean(reco(:))) ' std=' num2str(std(reco(:)))])
+subplot(1,2,2);hist(target(:),512);title(['M=' num2str(mean(target(:))) ' std=' num2str(std(target(:)))])
 
+%% Poisson
+target = zeros(N,1);
+target([20 56 100 112 200]) = 1;%poissrnd(0.5mmm,N,1);
+target = target-min(target(:));
+target = target/norm(target);
 
-figure;subplot(1,2,1);hist(reco(:),512);
-subplot(1,2,2);hist(target(:),512);
+Sa= fwdscatt(target,filters, options);
+Si=Scataudio_to_Scatimage(Sa,filters,opt_2d.J1);
+[reco,energy]= newscatt_synthesis_mgrid(Si, filt_2d, opt_2d, target, max(target(:)));
 
-% reco= 2*(reco-1);
-
-
+%see difference
+[Sr,~]= fwdscatt(reco,filt_2d, opt_2d);%for debug
+figure;
+r = scat2vector(Sr);
+s = scat2vector(Si);
+plot(r);hold on; plot(s,'r')
+figure;subplot(1,2,1);hist(reco(:),512);title(['M=' num2str(mean(reco(:))) ' std=' num2str(std(reco(:)))])
+subplot(1,2,2);hist(target(:),512);title(['M=' num2str(mean(target(:))) ' std=' num2str(std(target(:)))])
 
 
 % %% Synthesizing new Gaussian texture 1d

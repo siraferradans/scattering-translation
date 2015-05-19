@@ -12,8 +12,6 @@ close all
 % remap01=@(x)remap(x,0,1);
 
 N = 256;
-target = ones(N,1);
-target = target/norm(target);
 % target = loadresample('orig_ex_1.wav',2);
 % target = target(1:N);
 %for audio!!
@@ -21,13 +19,13 @@ target = target/norm(target);
 options.N = 256;
 options.localized=1;
 options.J1=min(log2(options.N),12);
-options.J2=min(log2(options.N),12);
+options.J2=min(log2(options.N),12); %necesario para que no se sobre-escriba en las options
 options.J3=min(log2(options.N),12);
 options.L1=1;
 options.L2=1;
 options.L3=1;
-options.Q1=1;
-options.niters=1000;
+options.Q1=8;
+options.niters=100;
 options.dataset='unidim';
 options.lambda=+1e-6;
 options.multigrid=0;
@@ -46,7 +44,7 @@ fouriereq=getoptions(options,'fouriereq',0);%replace scattering with spectral eq
 N  = getoptions(options,'N',1024);
 J1 = getoptions(options,'J1',8);
 dataset=getoptions(options,'dataset','unidim');
-Q1 = getoptions(options,'Q1',8);
+Q1 = getoptions(options,'Q1',1);
 J2 = getoptions(options,'J2',8);
 Q2 = getoptions(options,'Q2',1);
 J3 = getoptions(options,'J3',8);
@@ -83,14 +81,47 @@ options.l2scatt=1;
 options.positive = 0;
 options
 
+%% Filter generation
+% audio part
 [filters,lpal] = generate_scatt_filters(options);
-
-options
-
-Sa= fwdscatt(target,filters, options);
 J = log2(N);
 %number of coefficients:
 1+options.Q1*options.J1
+
+% image part
+opt_2d = options;
+opt_2d.L1=8;
+opt_2d.L2=1;
+opt_2d.Q1=1;
+opt_2d.Q2=1;
+
+opt_2d.onedim=false;
+opt_2d.softthreshold=0;
+opt_2d
+[filt_2d,lpal_2d] = generate_scatt_filters(opt_2d);
+
+1+opt_2d.L1*opt_2d.J1
+
+%%%%%%%%%%%%%%%% Application to signals %%%%%%%%%%%%%%%%%%%
+
+%% Gaussian
+
+%getting a filter 
+%m=1,resolution=1,q=2,l=1
+fm = zeros(N,1);
+x = randn(N,1);
+q=8; %% one q !!
+target=zeros(N,1);
+for j=1:opt_2d.J1
+    f = filters{1}.psi{1}{(j-1)*Q+q}{1};
+    target = target+real(ifft(fft(x).*f));
+    fm = fm + f; 
+end
+
+target = target-min(target(:));
+target = target/norm(target);
+
+Sa= fwdscatt(target,filters, options);
 
 %%%%%% testing...
 %Ojo Q=1!! sino no funciona!  y los valores no pueden ser negativos 
@@ -101,59 +132,84 @@ J = log2(N);
 % plot(a);hold on; plot(r,'r')
 %%%%%
 
-%% %%%%%%%%%%%%%%%%% image part
-opt_2d = options;
-opt_2d.L1=1;
-opt_2d.L2=1;
-opt_2d.Q1=1;
-opt_2d.Q2=1;
-
-opt_2d.onedim=false;
-
-opt_2d
-[filt_2d,lpal_2d] = generate_scatt_filters(opt_2d);
-
-1+opt_2d.L1*opt_2d.J1
-
 % translate Sa into a Simages
 % just taking into account the first and second layer, but we need to
 % change the meta data
 
 Si=Scataudio_to_Scatimage(Sa,filters,opt_2d.J1);
 
-
-
-%%debugging 
-xx = ones(N,N);
-xx = xx/norm(xx(:));
-[Sx,~]= fwdscatt(xx,filt_2d, opt_2d);%for debug
-x = scat2vector(Sx);
-
-opt_2d.init = xx;
-
+opt_2d.input = rand(N,N);
+opt_2d.input = (opt_2d.input-min(opt_2d.input(:)))/norm(opt_2d.input);
 [reco,energy]= newscatt_synthesis_mgrid(Si, filt_2d, opt_2d, target, max(target(:)));
-[Sr,~]= fwdscatt(reco,filt_2d, opt_2d);%for debug
 
+%see difference
+[Sr,~]= fwdscatt(reco,filt_2d, opt_2d);%for debug
 figure;
 r = scat2vector(Sr);
 s = scat2vector(Si);
 plot(r);hold on; plot(s,'r')
+figure;subplot(1,2,1);hist(reco(:),512);title(['M=' num2str(mean(reco(:))) ' std=' num2str(std(reco(:)))])
+subplot(1,2,2);hist(target(:),512);title(['M=' num2str(mean(target(:))) ' std=' num2str(std(target(:)))])
+
+%% other Gaussian
+
+%getting a filter 
+%m=1,resolution=1,q=2,l=1
+x = randn(N,1);
+q = 3;
+Q = options.Q1;
+j = 2; %1:options.J1;
+for q =1:options.Q1 %% one q !!
+    f = filters{1}.psi{1}{(j-1)*Q+q}{1};
+    xx =fft(x).*f;
+    target = real(ifft(xx));
+
+    target = target-min(target(:));
+    target = target/norm(target);
+
+    Sa= fwdscatt(target,filters, options);
+    Si=Scataudio_to_Scatimage(Sa,filters,opt_2d.J1);
+
+    [reco,energy]= newscatt_synthesis_mgrid(Si, filt_2d, opt_2d, target, max(target(:)));
+
+    figure;plot(energy)
+    %see difference
+    [Sr,~]= fwdscatt(reco,filt_2d, opt_2d);%for debug
+    r = scat2vector(Sr);
+    s = scat2vector(Si);
+    figure;
+    subplot(1,2,1);plot(r);hold on; plot(s,'r')
+    subplot(1,2,2);imshow(reco,[])
+end
 
 
-figure;subplot(1,2,1);hist(reco(:),512);
-subplot(1,2,2);hist(target(:),512);
+%% Real sound
 
-% reco= 2*(reco-1);
+select=@(target,r)target(1:end/r);
+path='../../data/mcdermott/';
+loadresample=@(file,r)select(resample(audioread([path file]),1,r),r);
 
+% fl=@(x)x(:);
+% remap=@(x,m,M)(M-m)*(x-min(fl(x)))/(max(fl(x))-min(fl(x)))+m;
+% remap01=@(x)remap(x,0,1);
 
+N = 256;
+target = loadresample('orig_ex_1.wav',2);
+target = target(1:N);
 
+target = target-min(target(:));
+target = target/norm(target);
 
-% %% Synthesizing new Gaussian texture 1d
-% cov=@(f) abs( fft(f-mean(f(:))).^2 ) ;
-% synthesisGaussian=@(N,C,m)1/sqrt(options.N)*real(ifft(sqrt(C).*fft(randn(N,1))))+m;
-% reco_Gaussian = synthesisGaussian(options.N,cov(target),mean(target));
-% 
-% subplot(131);plot(target);title('Original')
-% subplot(132);plot(reco);title('Reco. Scattering')
-% subplot(133);plot(reco_Gaussian);title('Gaussian')
+Sa= fwdscatt(target,filters, options);
+Si=Scataudio_to_Scatimage(Sa,filters,opt_2d.J1);
 
+[reco,energy]= newscatt_synthesis_mgrid(Si, filt_2d, opt_2d, target, max(target(:)));
+
+figure;plot(energy)
+%see difference
+[Sr,~]= fwdscatt(reco,filt_2d, opt_2d);%for debug
+r = scat2vector(Sr);
+s = scat2vector(Si);
+figure;
+subplot(1,2,1);plot(r);hold on; plot(s,'r')
+subplot(1,2,2);imshow(reco,[])
